@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Gravador de Voz</title>
+  </head>
+  <body>
+    <h1>Gravador de Voz</h1>
+    <button id="gravar">Gravar</button>
+    <button id="parar" disabled>Parar</button>
+    <button id="reproduzir" disabled>Reproduzir</button>
+
+    <div id="audioContainer"></div>
+
+    <script>
+      let gravador;
+      let chunks = [];
+      let audioIndex = 1;
+
+      const gravarButton = document.getElementById('gravar');
+      const pararButton = document.getElementById('parar');
+      const reproduzirButton = document.getElementById('reproduzir');
+      const audioContainer = document.getElementById('audioContainer');
+
+      gravarButton.addEventListener('click', iniciarGravacao);
+      pararButton.addEventListener('click', pararGravacao);
+      reproduzirButton.addEventListener('click', reproduzirGravacao);
+
+      // Abrir conexão com o IndexedDB
+      const request = window.indexedDB.open('audioDB', 1);
+
+      let db;
+
+      request.onerror = function(event) {
+        console.log('Erro ao abrir o banco de dados:', event.target.errorCode);
+      };
+
+      request.onupgradeneeded = function(event) {
+        db = event.target.result;
+
+        const objectStore = db.createObjectStore('audios', { autoIncrement: true });
+      };
+
+      request.onsuccess = function(event) {
+        db = event.target.result;
+
+        // Recupera áudios salvos
+        recuperarAudios();
+      };
+
+      function iniciarGravacao() {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then(function(stream) {
+            gravador = new MediaRecorder(stream);
+
+            gravador.addEventListener('dataavailable', function(event) {
+              chunks.push(event.data);
+            });
+
+            gravador.start();
+
+            gravarButton.disabled = true;
+            pararButton.disabled = false;
+          })
+          .catch(function(error) {
+            console.log('Erro ao acessar o microfone: ', error);
+          });
+      }
+
+      function pararGravacao() {
+        gravador.stop();
+
+        gravador.addEventListener('stop', function() {
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          chunks = [];
+
+          // Armazena o áudio no IndexedDB
+          armazenarAudio(blob);
+
+          gravarButton.disabled = false;
+          pararButton.disabled = true;
+          reproduzirButton.disabled = false;
+        });
+      }
+
+      function armazenarAudio(blob) {
+        const transaction = db.transaction(['audios'], 'readwrite');
+        const objectStore = transaction.objectStore('audios');
+        const request = objectStore.add(blob);
+
+        request.onsuccess = function(event) {
+          console.log('Áudio armazenado com sucesso no IndexedDB.');
+          recuperarAudios();
+        };
+
+        request.onerror = function(event) {
+          console.log('Erro ao armazenar o áudio no IndexedDB:', event.target.error);
+        };
+      }
+
+      function recuperarAudios() {
+        audioContainer.innerHTML = '';
+
+        const transaction = db.transaction(['audios'], 'readonly');
+        const objectStore = transaction.objectStore('audios');
+        const request = objectStore.openCursor();
+
+       request.onsuccess = function(event) {
+          const cursor = event.target.result;
+
+          if (cursor) {
+            const audioElement = document.createElement('audio');
+            audioElement.src = URL.createObjectURL(cursor.value);
+            audioElement.controls = true;
+
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Excluir';
+            deleteButton.addEventListener('click', function() {
+              excluirAudio(cursor.key);
+            });
+
+            const audioContainerItem = document.createElement('div');
+            audioContainerItem.appendChild(audioElement);
+            audioContainerItem.appendChild(deleteButton);
+
+            audioContainer.appendChild(audioContainerItem);
+
+            cursor.continue();
+          }
+        };
+
+        request.onerror = function(event) {
+          console.log('Erro ao recuperar os áudios do IndexedDB:', event.target.error);
+        };
+      }
+
+      function excluirAudio(key) {
+        const transaction = db.transaction(['audios'], 'readwrite');
+        const objectStore = transaction.objectStore('audios');
+        const request = objectStore.delete(key);
+        console.log(' index', key )
+        console.log(' objectStore', objectStore )
+        console.log(' transaction', transaction )
+
+        request.onsuccess = function(event) {
+          console.log('Áudio excluído com sucesso do IndexedDB.');
+          recuperarAudios();
+        };
+
+        request.onerror = function(event) {
+          console.log('Erro ao excluir o áudio do IndexedDB:', event.target.error);
+        };
+      }
+
+      function reproduzirGravacao() {
+        const audioElements = document.getElementsByTagName('audio');
+        const lastAudioElement = audioElements[audioElements.length - 1];
+
+        lastAudioElement.play();
+      }
+    </script>
+  </body>
+</html>
