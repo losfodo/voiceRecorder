@@ -104,7 +104,7 @@
         const objectStore = transaction.objectStore('audios');
         const request = objectStore.openCursor();
 
-       request.onsuccess = function(event) {
+        request.onsuccess = function(event) {
           const cursor = event.target.result;
 
           if (cursor) {
@@ -114,8 +114,9 @@
 
             const deleteButton = document.createElement('button');
             deleteButton.textContent = 'Excluir';
+            deleteButton.setAttribute('data-key', cursor.key); // Armazena a chave como atributo personalizado
             deleteButton.addEventListener('click', function() {
-              excluirAudio(cursor.key);
+              excluirAudio(parseInt(this.getAttribute('data-key'))); // Recupera a chave e converte para número
             });
 
             const audioContainerItem = document.createElement('div');
@@ -137,9 +138,6 @@
         const transaction = db.transaction(['audios'], 'readwrite');
         const objectStore = transaction.objectStore('audios');
         const request = objectStore.delete(key);
-        console.log(' index', key )
-        console.log(' objectStore', objectStore )
-        console.log(' transaction', transaction )
 
         request.onsuccess = function(event) {
           console.log('Áudio excluído com sucesso do IndexedDB.');
